@@ -2,12 +2,35 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Bluetooth Permissions -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Location Permissions -->
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        tools:ignore="CoarseFineLocation" />
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        tools:ignore="CoarseFineLocation" />
+
+    <!-- Internet and Network Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Camera Permissions -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Phone and Notifications -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Storage Permissions (for Android 12 and below) -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"
@@ -15,12 +38,19 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- Media Permissions (for Android 13 and above) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- Biometrics -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- Foreground Services -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Hardware Features -->
     <uses-feature
         android:name="android.hardware.sensor.accelerometer"
         android:required="false" />
@@ -28,14 +58,12 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <!-- SMS Intent Queries -->
     <queries>
         <intent>
             <action android:name="android.intent.action.SENDTO" />
-            <data
-                android:host="*"
-                android:scheme="smsto" />
+            <data android:scheme="smsto" android:host="*" />
         </intent>
-
     </queries>
 
     <application
@@ -53,6 +81,7 @@
         android:usesCleartextTraffic="true"
         tools:replace="allowBackup"
         tools:targetApi="s">
+
         <uses-library
             android:name="org.apache.http.legacy"
             android:required="false" />
@@ -61,6 +90,7 @@
             android:name="io.sentry.auto-init"
             android:value="false" />
 
+        <!-- Launcher Activity -->
         <activity
             android:name=".usescases.splash.SplashActivity"
             android:exported="true"
@@ -70,86 +100,61 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".usescases.login.LoginActivity"
+
+        <!-- App Activities -->
+        <activity android:name=".usescases.login.LoginActivity"
             android:configChanges="orientation|screenSize"
             android:windowSoftInputMode="adjustPan" />
         <activity android:name=".usescases.main.MainActivity" />
         <activity android:name=".usescases.programEventDetail.ProgramEventDetailActivity" />
-        <activity
-            android:name=".usescases.searchTrackEntity.SearchTEActivity"
+        <activity android:name=".usescases.searchTrackEntity.SearchTEActivity"
             android:configChanges="keyboardHidden|screenSize"
-            android:windowSoftInputMode="stateAlwaysHidden"
-            />
+            android:windowSoftInputMode="stateAlwaysHidden" />
         <activity android:name=".usescases.teiDashboard.TeiDashboardMobileActivity" />
         <activity android:name=".usescases.qrScanner.ScanActivity" />
         <activity android:name=".usescases.teiDashboard.teiProgramList.TeiProgramListActivity" />
         <activity android:name="org.dhis2.maps.views.MapSelectorActivity" />
         <activity android:name=".usescases.programStageSelection.ProgramStageSelectionActivity" />
         <activity android:name=".utils.WebViewActivity" />
-        <activity
-            android:name=".usescases.eventsWithoutRegistration.eventInitial.EventInitialActivity"
+        <activity android:name=".usescases.eventsWithoutRegistration.eventInitial.EventInitialActivity"
             android:windowSoftInputMode="stateAlwaysHidden" />
         <activity android:name=".usescases.qrCodes.QrActivity" />
         <activity android:name=".usescases.qrCodes.eventsworegistration.QrEventsWORegistrationActivity" />
-
         <activity android:name=".usescases.datasets.datasetDetail.DataSetDetailActivity" />
         <activity android:name=".usescases.datasets.datasetInitial.DataSetInitialActivity" />
-        <activity
-            android:name=".usescases.datasets.dataSetTable.DataSetTableActivity"
+        <activity android:name=".usescases.datasets.dataSetTable.DataSetTableActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:windowSoftInputMode="adjustResize" />
-
-        <receiver
-            android:name=".widgets.DhisCustomLauncher"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/dhis_custom_launcher_info" />
-        </receiver>
-
         <activity android:name=".usescases.reservedValue.ReservedValueActivity" />
-        <activity
-            android:name=".usescases.eventsWithoutRegistration.eventCapture.EventCaptureActivity"
+        <activity android:name=".usescases.eventsWithoutRegistration.eventCapture.EventCaptureActivity"
             android:configChanges="keyboardHidden|screenSize"
             android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
         <activity android:name=".usescases.sync.SyncActivity" />
-
-        <service
-            android:name=".usescases.sms.SmsSendingService"
-            android:foregroundServiceType="dataSync" />
-
         <activity android:name=".usescases.about.PolicyView" />
-
-        <activity
-            android:name=".usescases.enrollment.EnrollmentActivity"
+        <activity android:name=".usescases.enrollment.EnrollmentActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:windowSoftInputMode="adjustResize|stateAlwaysHidden" />
         <activity android:name=".usescases.events.ScheduledEventActivity" />
-
-        <activity
-            android:name=".usescases.notes.noteDetail.NoteDetailActivity"
+        <activity android:name=".usescases.notes.noteDetail.NoteDetailActivity"
             android:windowSoftInputMode="adjustResize" />
         <activity android:name=".usescases.settingsprogram.SettingsProgramActivity" />
 
+        <!-- OAuth Redirect Activity -->
         <activity
             android:name="net.openid.appauth.RedirectUriReceiverActivity"
             android:exported="true"
             tools:node="replace">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
                 <data android:scheme="*" />
             </intent-filter>
         </activity>
+
         <activity android:name=".usescases.login.accounts.AccountsActivity" />
+
+        <!-- Crash Handler -->
         <activity
             android:name=".usescases.crash.CrashActivity"
             android:exported="false"
@@ -159,11 +164,18 @@
             </intent-filter>
         </activity>
 
+        <!-- SMS Sending Service -->
+        <service
+            android:name=".usescases.sms.SmsSendingService"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- WorkManager System Foreground Service -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!-- File Provider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -175,6 +187,19 @@
                 android:resource="@xml/provider_paths"
                 tools:replace="android:resource" />
         </provider>
+
+        <!-- App Widget Receiver -->
+        <receiver
+            android:name=".widgets.DhisCustomLauncher"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dhis_custom_launcher_info" />
+        </receiver>
+
     </application>
 
 </manifest>

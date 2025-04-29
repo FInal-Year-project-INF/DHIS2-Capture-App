@@ -47,6 +47,7 @@ import org.dhis2.ui.dialogs.bottomsheet.BottomSheetDialog
 import org.dhis2.ui.dialogs.bottomsheet.BottomSheetDialogUiModel
 import org.dhis2.ui.dialogs.bottomsheet.DialogButtonStyle.DiscardButton
 import org.dhis2.ui.dialogs.bottomsheet.DialogButtonStyle.MainButton
+import org.dhis2.usescases.eventsWithoutRegistration.com.coder.temperec.ul.theme.TemperatureSensorManager
 import org.dhis2.usescases.eventsWithoutRegistration.eventCapture.eventCaptureFragment.EventCaptureFormFragment
 import org.dhis2.usescases.eventsWithoutRegistration.eventDetails.injection.EventDetailsComponent
 import org.dhis2.usescases.eventsWithoutRegistration.eventDetails.injection.EventDetailsComponentProvider
@@ -83,6 +84,9 @@ class EventCaptureActivity :
     EventDetailsComponentProvider,
     TEIDataActivityContract {
     private lateinit var binding: ActivityEventCaptureBinding
+    // Declare this once at the top of your class
+    private lateinit var temperatureSensorManager: TemperatureSensorManager
+
 
     @Inject
     override lateinit var presenter: EventCaptureContract.Presenter
@@ -110,7 +114,12 @@ class EventCaptureActivity :
     private var adapter: EventCapturePagerAdapter? = null
     private var eventViewPager: ViewPager2? = null
     private var dashboardViewModel: DashboardViewModel? = null
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Initialize the temperature sensor manager
+        setupTemperatureSensor()
+
         eventUid = intent.getStringExtra(Constants.EVENT_UID)
         programUid = intent.getStringExtra(Constants.PROGRAM_UID)
         setUpEventCaptureComponent(eventUid!!)
@@ -332,6 +341,22 @@ class EventCaptureActivity :
             true
         }
     }
+    private fun setupTemperatureSensor() {
+        temperatureSensorManager = TemperatureSensorManager(
+            this,
+            permissionsLauncher,
+            bluetoothLauncher,
+            object : TemperatureSensorManager.TemperatureCallback {
+                override fun onTemperatureReceived(temperature: Float) {
+                    runOnUiThread {
+                        binding.programStageName.text = "Temp: ${temperature}°C"
+                    }
+                }
+            }
+        )
+        temperatureSensorManager.startScanning()
+    }
+
 
     override fun updatePercentage(primaryValue: Float) {
         binding.completion.setCompletionPercentage(primaryValue)

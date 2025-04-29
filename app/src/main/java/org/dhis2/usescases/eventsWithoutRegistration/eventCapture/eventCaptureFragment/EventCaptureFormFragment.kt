@@ -175,4 +175,5 @@ class EventCaptureFormFragment : FragmentGlobalAbstract(), EventCaptureFormView 
             return fragment
         }
     }
+
 }

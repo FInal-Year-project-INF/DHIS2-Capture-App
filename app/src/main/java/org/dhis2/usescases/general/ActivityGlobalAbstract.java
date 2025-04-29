@@ -4,10 +4,13 @@ import static org.dhis2.utils.analytics.AnalyticsConstants.CLICK;
 import static org.dhis2.utils.analytics.AnalyticsConstants.SHOW_HELP;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -22,6 +25,7 @@ import org.dhis2.utils.HelpManager;
 import org.dhis2.utils.OnDialogClickListener;
 import org.dhis2.utils.analytics.AnalyticsHelper;
 import org.dhis2.utils.granularsync.SyncStatusDialog;
+import org.jetbrains.annotations.NotNull;
 
 import javax.inject.Inject;
 
@@ -39,6 +43,15 @@ public abstract class ActivityGlobalAbstract extends SessionManagerActivity
     public CrashReportController crashReportController;
 
     private CustomDialog descriptionDialog;
+    @NotNull
+    public final ActivityResultLauncher<String[]> permissionsLauncher;
+    @NotNull
+    public final ActivityResultLauncher<Intent> bluetoothLauncher;
+
+    protected ActivityGlobalAbstract() {
+        permissionsLauncher = null;
+        bluetoothLauncher = null;
+    }
 
 
     @Override
