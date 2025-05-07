@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -36,7 +37,13 @@ import org.dhis2.commons.animations.show
 import org.dhis2.commons.dialogs.AlertBottomDialog
 import org.dhis2.commons.dialogs.CustomDialog
 import org.dhis2.commons.dialogs.DialogClickListener
+import org.dhis2.commons.prefs.PreferenceProviderImpl
+import org.dhis2.commons.resources.ColorUtils
 import org.dhis2.commons.resources.EventResourcesProvider
+import org.dhis2.commons.resources.ResourceManager
+import org.dhis2.commons.schedulers.AppSchedulerProvider
+
+import org.dhis2.commons.schedulers.SchedulerProvider
 import org.dhis2.commons.sync.OnDismissListener
 import org.dhis2.commons.sync.SyncContext
 import org.dhis2.databinding.ActivityEventCaptureBinding
@@ -70,6 +77,8 @@ import org.dhis2.utils.granularsync.SyncStatusDialog
 import org.dhis2.utils.granularsync.shouldLaunchSyncDialog
 import org.dhis2.utils.isLandscape
 import org.dhis2.utils.isPortrait
+import org.hisp.dhis.android.core.D2
+import org.hisp.dhis.android.core.D2Manager
 import org.hisp.dhis.mobile.ui.designsystem.component.menu.MenuItemData
 import org.hisp.dhis.mobile.ui.designsystem.component.menu.MenuItemStyle
 import org.hisp.dhis.mobile.ui.designsystem.component.menu.MenuLeadingElement
@@ -111,32 +120,110 @@ class EventCaptureActivity :
     private var teiUid: String? = null
     private var enrollmentUid: String? = null
     private val relationshipMapButton: LiveData<Boolean> = MutableLiveData(false)
+    @Inject lateinit var schedulerProvider: SchedulerProvider
+
     private var adapter: EventCapturePagerAdapter? = null
     private var eventViewPager: ViewPager2? = null
     private var dashboardViewModel: DashboardViewModel? = null
 
+    private fun setUpViewPagerAdapter() {
+        eventViewPager?.isUserInputEnabled = false
+        adapter = EventCapturePagerAdapter(
+            this,
+            programUid ?: "", // Use the class property instead of intent.getStringExtra()
+            eventUid ?: "",
+            pageConfigurator?.displayAnalytics() ?: false, // Handle nullability
+            pageConfigurator?.displayRelationships() ?: false,
+            intent.getBooleanExtra(OPEN_ERROR_LOCATION, false),
+            eventMode,
+        )
+        eventViewPager?.adapter = adapter
+        eventViewPager?.registerOnPageChangeCallback(object : OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                if (position == 0 && eventMode !== EventMode.NEW) {
+                    binding.syncButton.visibility = View.VISIBLE
+                } else {
+                    binding.syncButton.visibility = View.GONE
+                }
+                if (position != 1) {
+                    hideProgress()
+                }
+            }
+        })
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Initialize the temperature sensor manager
-        setupTemperatureSensor()
-
-        eventUid = intent.getStringExtra(Constants.EVENT_UID)
-        programUid = intent.getStringExtra(Constants.PROGRAM_UID)
-        setUpEventCaptureComponent(eventUid!!)
-        teiUid = presenter.getTeiUid()
-        enrollmentUid = presenter.getEnrollmentUid()
-        themeManager!!.setProgramTheme(intent.getStringExtra(Constants.PROGRAM_UID)!!)
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_event_capture)
-        binding.presenter = presenter
-        eventViewPager = when {
-            this.isLandscape() -> binding.eventViewLandPager
-            else -> binding.eventViewPager
+
+        val d2: D2? = D2Manager.getD2()
+        // 2. Get event UID safely
+        var eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
+            Toast.makeText(this, "Event UID is required", Toast.LENGTH_SHORT).show()
+            finish()
+            return
         }
-        eventMode = intent.getSerializableExtra(Constants.EVENT_MODE) as EventMode
+
+        // 3. Initialize dependencies
+        val eventCapture = EventCaptureRepositoryImpl(eventUid, d2)
+
+
+
+        // Create this class if it doesn't exist
+
+        val preferences = PreferenceProviderImpl(this)
+        val resourceManager = ResourceManager(this, ColorUtils())
+
+    //
+
+        // 5. Initialize page configurator properly
+        val pageConfigurator = EventPageConfigurator( // Create this implementation
+            eventCaptureRepository = eventCapture
+        )
+
+
+        // 6. Create and assign presenter
+        this.presenter = EventCapturePresenterImpl(
+            this,
+            eventUid,
+            eventCapture,
+            schedulerProvider = schedulerProvider,
+            preferences = preferences,
+            pageConfigurator = pageConfigurator,
+            resourceManager = resourceManager
+        )
+        binding.presenter = presenter
+
+        // Rest of your initialization code...
+        presenter.init()
+
+
+
+
+
+        // Safe theme setup
+        themeManager?.setProgramTheme(intent.getStringExtra(Constants.PROGRAM_UID) ?: "")
+
+        // Check for required extras
+        eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
+            finish()
+            return
+        }
+        programUid = intent.getStringExtra(Constants.PROGRAM_UID) ?: ""
+
+        // Initialize ViewPager safely
+        eventViewPager = if (isLandscape()) binding.eventViewLandPager else binding.eventViewPager
         setUpViewPagerAdapter()
+
+        // Rest of the setup...
+
         setUpNavigationBar()
         setupMoreOptionsMenu()
+        setupTemperatureSensor()
+
+
 
         setUpEventCaptureFormLandscape(eventUid ?: "")
         if (this.isLandscape() && areTeiUidAndEnrollmentUidNotNull()) {
@@ -161,32 +248,9 @@ class EventCaptureActivity :
         }
     }
 
-    private fun setUpViewPagerAdapter() {
-        eventViewPager?.isUserInputEnabled = false
-        adapter = EventCapturePagerAdapter(
-            this,
-            intent.getStringExtra(Constants.PROGRAM_UID) ?: "",
-            intent.getStringExtra(Constants.EVENT_UID) ?: "",
-            pageConfigurator!!.displayAnalytics(),
-            pageConfigurator!!.displayRelationships(),
-            intent.getBooleanExtra(OPEN_ERROR_LOCATION, false),
-            eventMode,
-        )
-        eventViewPager?.adapter = adapter
-        eventViewPager?.registerOnPageChangeCallback(object : OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                super.onPageSelected(position)
-                if (position == 0 && eventMode !== EventMode.NEW) {
-                    binding.syncButton.visibility = View.VISIBLE
-                } else {
-                    binding.syncButton.visibility = View.GONE
-                }
-                if (position != 1) {
-                    hideProgress()
-                }
-            }
-        })
-    }
+
+
+
 
     private fun setUpNavigationBar() {
         eventViewPager?.registerOnPageChangeCallback(
@@ -639,6 +703,8 @@ class EventCaptureActivity :
         }
     }
 }
+
+
 
 enum class EventCaptureMenuItem {
     SHOW_HELP,

@@ -5,10 +5,11 @@ import dagger.Provides
 import javax.inject.Singleton
 
 @Module
-class SchedulerModule(private val schedulerProvider: SchedulerProvider) {
+class SchedulerModule {
+
     @Provides
     @Singleton
-    fun schedulerProvider(): SchedulerProvider {
-        return schedulerProvider
+    fun provideSchedulerProvider(): SchedulerProvider {
+        return AppSchedulerProvider()
     }
 }

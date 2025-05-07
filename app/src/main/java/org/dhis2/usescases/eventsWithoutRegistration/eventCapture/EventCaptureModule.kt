@@ -119,6 +119,6 @@ class EventCaptureModule(
     fun pageConfigurator(
         repository: EventCaptureRepository,
     ): NavigationPageConfigurator {
-        return EventPageConfigurator(repository, isPortrait)
+        return EventPageConfigurator(repository)
     }
 }

@@ -192,7 +192,7 @@ public class App extends MultiDexApplication implements Components, LifecycleObs
     protected AppComponent.Builder prepareAppComponent() {
         return DaggerAppComponent.builder()
                 .appModule(new AppModule(this))
-                .schedulerModule(new SchedulerModule(new SchedulersProviderImpl()))
+                .schedulerModule(new SchedulerModule())
                 .analyticsModule(new AnalyticsModule())
                 .preferenceModule(new PreferenceModule())
                 .networkUtilsModule(new NetworkUtilsModule())
