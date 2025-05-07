@@ -30,6 +30,10 @@ import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import org.dhis2.R
+
+
+
+
 import org.dhis2.bindings.app
 import org.dhis2.commons.Constants
 import org.dhis2.commons.animations.hide
@@ -158,33 +162,35 @@ class EventCaptureActivity :
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_event_capture)
 
+        // ✅ Initialize eventMode safely here
+        eventMode = intent.getSerializableExtra(Constants.EVENT_MODE) as? EventMode
+            ?: run {
+                Toast.makeText(this, "Event mode is required", Toast.LENGTH_SHORT).show()
+                finish()
+                return
+            }
+
+        // 2. Initialize D2 instance
         val d2: D2? = D2Manager.getD2()
-        // 2. Get event UID safely
+
+        // 3. Get event UID safely
         var eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
             Toast.makeText(this, "Event UID is required", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
-        // 3. Initialize dependencies
+        // 4. Initialize dependencies
         val eventCapture = EventCaptureRepositoryImpl(eventUid, d2)
 
+        // Call this first to ensure @Inject fields are initialized
+        setUpEventCaptureComponent(eventUid)
 
-
-        // Create this class if it doesn't exist
-
+        // Now it's safe to use schedulerProvider
         val preferences = PreferenceProviderImpl(this)
         val resourceManager = ResourceManager(this, ColorUtils())
+        val pageConfigurator = EventPageConfigurator(eventCapture)
 
-    //
-
-        // 5. Initialize page configurator properly
-        val pageConfigurator = EventPageConfigurator( // Create this implementation
-            eventCaptureRepository = eventCapture
-        )
-
-
-        // 6. Create and assign presenter
         this.presenter = EventCapturePresenterImpl(
             this,
             eventUid,
@@ -194,14 +200,11 @@ class EventCaptureActivity :
             pageConfigurator = pageConfigurator,
             resourceManager = resourceManager
         )
+
         binding.presenter = presenter
 
         // Rest of your initialization code...
         presenter.init()
-
-
-
-
 
         // Safe theme setup
         themeManager?.setProgramTheme(intent.getStringExtra(Constants.PROGRAM_UID) ?: "")
@@ -218,12 +221,9 @@ class EventCaptureActivity :
         setUpViewPagerAdapter()
 
         // Rest of the setup...
-
         setUpNavigationBar()
         setupMoreOptionsMenu()
         setupTemperatureSensor()
-
-
 
         setUpEventCaptureFormLandscape(eventUid ?: "")
         if (this.isLandscape() && areTeiUidAndEnrollmentUidNotNull()) {
@@ -247,7 +247,6 @@ class EventCaptureActivity :
             showSyncDialog(EVENT_SYNC)
         }
     }
-
 
 
 
