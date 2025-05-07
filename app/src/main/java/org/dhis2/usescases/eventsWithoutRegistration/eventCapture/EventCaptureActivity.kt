@@ -1,13 +1,16 @@
 package org.dhis2.usescases.eventsWithoutRegistration.eventCapture
-
+import android.content.pm.PackageManager
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -21,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -29,8 +33,9 @@ import androidx.viewpager2.widget.ViewPager2
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+//import org.dhis2.Manifest
 import org.dhis2.R
-
+import android.Manifest
 
 
 
@@ -157,7 +162,6 @@ class EventCaptureActivity :
         })
     }
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_event_capture)
@@ -223,7 +227,38 @@ class EventCaptureActivity :
         // Rest of the setup...
         setUpNavigationBar()
         setupMoreOptionsMenu()
-        setupTemperatureSensor()
+
+        // Initialize permissions launcher for handling permission requests (e.g., Bluetooth)
+        // In onCreate method
+        val permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                // Permission granted, set up temperature sensor
+                setupTemperatureSensor()
+            } else {
+                // Handle the case where permission is denied
+                Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+// Check for Bluetooth permission based on API level
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // API level 31 (Android 12) or higher
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                // Permission already granted, set up the temperature sensor
+                setupTemperatureSensor()
+            } else {
+                // Request the permission
+                permissionsLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        } else { // For lower API levels
+            // For devices below API 31, use the more general Bluetooth permissions
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED) {
+                // Permission already granted, set up the temperature sensor
+                setupTemperatureSensor()
+            } else {
+                // Request the general Bluetooth permission
+                permissionsLauncher.launch(Manifest.permission.BLUETOOTH)
+            }
+        }
 
         setUpEventCaptureFormLandscape(eventUid ?: "")
         if (this.isLandscape() && areTeiUidAndEnrollmentUidNotNull()) {
@@ -238,6 +273,7 @@ class EventCaptureActivity :
                 dashboardViewModel?.updateSelectedEventUid(eventUid)
             }
         }
+
         showProgress()
         presenter.initNoteCounter()
         presenter.init()
