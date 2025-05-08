@@ -1,4 +1,4 @@
-package org.dhis2.ui.avatar
+ package org.dhis2.ui.avatar
 
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable

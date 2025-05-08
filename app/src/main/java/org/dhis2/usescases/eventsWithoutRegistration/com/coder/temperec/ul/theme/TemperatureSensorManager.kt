@@ -19,7 +19,7 @@ import java.util.*
 
 class TemperatureSensorManager(
     private val context: Context,
-    private val permissionsLauncher: ActivityResultLauncher<Array<String>>,
+    private val permissionsLauncher: ActivityResultLauncher<String>,
     private val bluetoothLauncher: ActivityResultLauncher<Intent>,
     private val temperatureCallback: TemperatureCallback
 ) {
@@ -68,7 +68,7 @@ class TemperatureSensorManager(
         if (notGranted.isEmpty()) {
             checkBluetoothEnabled()
         } else {
-            permissionsLauncher.launch(permissions)
+            permissionsLauncher.launch(permissions.toString())
         }
     }
 
@@ -99,7 +99,7 @@ class TemperatureSensorManager(
         Handler(Looper.getMainLooper()).postDelayed({
             if (!deviceFound) {
                 scanner?.stopScan(scanCallback)
-                Timber.tag("TemperatureSensorManager").e("Device not found.")
+                Timber.tag("TemperatureSensorManage").e("Device not found.")
             }
         }, 10000) // 10 seconds timeout
     }
@@ -134,7 +134,7 @@ class TemperatureSensorManager(
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 bluetoothGatt?.close()
                 bluetoothGatt = null
-                Timber.tag("TemperatureSensorManager").e("Disconnected from GATT server.")
+                Timber.tag("TemperatureSensorManage").e("Disconnected from GATT server.")
             }
         }
 

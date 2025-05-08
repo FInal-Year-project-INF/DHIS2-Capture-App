@@ -36,7 +36,7 @@ import com.google.android.material.snackbar.Snackbar
 //import org.dhis2.Manifest
 import org.dhis2.R
 import android.Manifest
-
+import androidx.activity.result.ActivityResultLauncher
 
 
 import org.dhis2.bindings.app
@@ -50,7 +50,6 @@ import org.dhis2.commons.prefs.PreferenceProviderImpl
 import org.dhis2.commons.resources.ColorUtils
 import org.dhis2.commons.resources.EventResourcesProvider
 import org.dhis2.commons.resources.ResourceManager
-import org.dhis2.commons.schedulers.AppSchedulerProvider
 
 import org.dhis2.commons.schedulers.SchedulerProvider
 import org.dhis2.commons.sync.OnDismissListener
@@ -104,6 +103,8 @@ class EventCaptureActivity :
     private lateinit var binding: ActivityEventCaptureBinding
     // Declare this once at the top of your class
     private lateinit var temperatureSensorManager: TemperatureSensorManager
+    private lateinit var permissionsLauncher: ActivityResultLauncher<String>
+    private lateinit var bluetoothLauncher: ActivityResultLauncher<Intent>
 
 
     @Inject
@@ -166,36 +167,53 @@ class EventCaptureActivity :
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_event_capture)
 
-        // ✅ Initialize eventMode safely here
-        eventMode = intent.getSerializableExtra(Constants.EVENT_MODE) as? EventMode
-            ?: run {
-                Toast.makeText(this, "Event mode is required", Toast.LENGTH_SHORT).show()
-                finish()
-                return
+        // Initialize launchers FIRST
+        permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                setupTemperatureSensor()
+            } else {
+                Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
             }
+        }
 
-        // 2. Initialize D2 instance
-        val d2: D2? = D2Manager.getD2()
+        bluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                setupTemperatureSensor()
+            }
+        }
 
-        // 3. Get event UID safely
-        var eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
+        // Initialize eventMode
+        eventMode = intent.getSerializableExtra(Constants.EVENT_MODE) as? EventMode ?: run {
+            Toast.makeText(this, "Event mode is required", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
+        // D2 instance
+        // ✅ D2 instance - add null check
+        val d2: D2 = D2Manager.getD2() ?: run {
+            Toast.makeText(this, "D2 instance not available", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
+
+        // Event UID
+        val eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
             Toast.makeText(this, "Event UID is required", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
-        // 4. Initialize dependencies
+        // Dependencies
         val eventCapture = EventCaptureRepositoryImpl(eventUid, d2)
-
-        // Call this first to ensure @Inject fields are initialized
         setUpEventCaptureComponent(eventUid)
 
-        // Now it's safe to use schedulerProvider
         val preferences = PreferenceProviderImpl(this)
         val resourceManager = ResourceManager(this, ColorUtils())
         val pageConfigurator = EventPageConfigurator(eventCapture)
 
-        this.presenter = EventCapturePresenterImpl(
+        presenter = EventCapturePresenterImpl(
             this,
             eventUid,
             eventCapture,
@@ -206,67 +224,49 @@ class EventCaptureActivity :
         )
 
         binding.presenter = presenter
-
-        // Rest of your initialization code...
         presenter.init()
 
-        // Safe theme setup
-        themeManager?.setProgramTheme(intent.getStringExtra(Constants.PROGRAM_UID) ?: "")
-
-        // Check for required extras
-        eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
-            finish()
-            return
-        }
+        // Theme
         programUid = intent.getStringExtra(Constants.PROGRAM_UID) ?: ""
+        themeManager?.setProgramTheme(programUid.toString())
 
-        // Initialize ViewPager safely
+        // ViewPager
         eventViewPager = if (isLandscape()) binding.eventViewLandPager else binding.eventViewPager
         setUpViewPagerAdapter()
 
-        // Rest of the setup...
+        // Navigation & menu
         setUpNavigationBar()
         setupMoreOptionsMenu()
 
-        // Initialize permissions launcher for handling permission requests (e.g., Bluetooth)
-        // In onCreate method
-        val permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) {
-                // Permission granted, set up temperature sensor
+        // Bluetooth permissions & temperature sensor
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
                 setupTemperatureSensor()
             } else {
-                // Handle the case where permission is denied
-                Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-// Check for Bluetooth permission based on API level
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // API level 31 (Android 12) or higher
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                // Permission already granted, set up the temperature sensor
-                setupTemperatureSensor()
-            } else {
-                // Request the permission
                 permissionsLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
             }
-        } else { // For lower API levels
-            // For devices below API 31, use the more general Bluetooth permissions
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED) {
-                // Permission already granted, set up the temperature sensor
+        } else {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
                 setupTemperatureSensor()
             } else {
-                // Request the general Bluetooth permission
                 permissionsLauncher.launch(Manifest.permission.BLUETOOTH)
             }
         }
 
-        setUpEventCaptureFormLandscape(eventUid ?: "")
-        if (this.isLandscape() && areTeiUidAndEnrollmentUidNotNull()) {
-            val viewModelFactory = this.app().dashboardComponent()?.dashboardViewModelFactory()
-
+        // Landscape TEI setup
+        setUpEventCaptureFormLandscape(eventUid)
+        if (isLandscape() && areTeiUidAndEnrollmentUidNotNull()) {
+            val viewModelFactory = app().dashboardComponent()?.dashboardViewModelFactory()
             viewModelFactory?.let {
-                dashboardViewModel =
-                    ViewModelProvider(this, viewModelFactory)[DashboardViewModel::class.java]
+                dashboardViewModel = ViewModelProvider(this, it)[DashboardViewModel::class.java]
                 supportFragmentManager.beginTransaction()
                     .replace(R.id.tei_column, newInstance(programUid, teiUid, enrollmentUid))
                     .commit()
@@ -274,16 +274,15 @@ class EventCaptureActivity :
             }
         }
 
+        // Sync button
         showProgress()
         presenter.initNoteCounter()
-        presenter.init()
         binding.syncButton.setOnClickListener { showSyncDialog(EVENT_SYNC) }
 
         if (intent.shouldLaunchSyncDialog()) {
             showSyncDialog(EVENT_SYNC)
         }
     }
-
 
 
 
@@ -441,6 +440,7 @@ class EventCaptureActivity :
         }
     }
     private fun setupTemperatureSensor() {
+        if (!::permissionsLauncher.isInitialized) return
         temperatureSensorManager = TemperatureSensorManager(
             this,
             permissionsLauncher,
