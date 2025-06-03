@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity() {
     private var deviceFound = false
 
     private val bluetoothManager by lazy {
-        getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
     }
 
     private val scanner by lazy {

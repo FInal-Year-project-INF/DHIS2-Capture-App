@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 
+
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -85,7 +86,6 @@ import org.dhis2.utils.granularsync.SyncStatusDialog
 import org.dhis2.utils.granularsync.shouldLaunchSyncDialog
 import org.dhis2.utils.isLandscape
 import org.dhis2.utils.isPortrait
-import org.hisp.dhis.android.core.D2
 import org.hisp.dhis.android.core.D2Manager
 import org.hisp.dhis.mobile.ui.designsystem.component.menu.MenuItemData
 import org.hisp.dhis.mobile.ui.designsystem.component.menu.MenuItemStyle
@@ -167,45 +167,36 @@ class EventCaptureActivity :
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_event_capture)
 
-        // Initialize launchers FIRST
-        permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted) {
-                setupTemperatureSensor()
-            } else {
-                Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
-            }
-        }
+        // Initialize D2 (only if not already done)
+       // initializeD2()
 
-        bluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == RESULT_OK) {
-                setupTemperatureSensor()
-            }
-        }
-
-        // Initialize eventMode
-        eventMode = intent.getSerializableExtra(Constants.EVENT_MODE) as? EventMode ?: run {
-            Toast.makeText(this, "Event mode is required", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
-
-        // D2 instance
-        // ✅ D2 instance - add null check
-        val d2: D2 = D2Manager.getD2() ?: run {
+        val d2 = D2Manager.getD2()
+        if (d2 == null) {
             Toast.makeText(this, "D2 instance not available", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
+        // Launchers
+        initializeActivityResultLaunchers()
 
-        // Event UID
-        val eventUid = intent.getStringExtra(Constants.EVENT_UID) ?: run {
+        // Get event mode
+        eventMode = (intent.getSerializableExtra(Constants.EVENT_MODE) as? EventMode)!!
+        if (eventMode == null) {
+            Toast.makeText(this, "Event mode is required", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+
+        // Get event UID
+        val eventUid = intent.getStringExtra(Constants.EVENT_UID)
+        if (eventUid.isNullOrEmpty()) {
             Toast.makeText(this, "Event UID is required", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
-        // Dependencies
+        // Set up dependencies
         val eventCapture = EventCaptureRepositoryImpl(eventUid, d2)
         setUpEventCaptureComponent(eventUid)
 
@@ -217,7 +208,7 @@ class EventCaptureActivity :
             this,
             eventUid,
             eventCapture,
-            schedulerProvider = schedulerProvider,
+            schedulerProvider = schedulerProvider, // make sure this is initialized
             preferences = preferences,
             pageConfigurator = pageConfigurator,
             resourceManager = resourceManager
@@ -234,34 +225,14 @@ class EventCaptureActivity :
         eventViewPager = if (isLandscape()) binding.eventViewLandPager else binding.eventViewPager
         setUpViewPagerAdapter()
 
-        // Navigation & menu
+        // Navigation and menu
         setUpNavigationBar()
         setupMoreOptionsMenu()
 
-        // Bluetooth permissions & temperature sensor
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                setupTemperatureSensor()
-            } else {
-                permissionsLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                setupTemperatureSensor()
-            } else {
-                permissionsLauncher.launch(Manifest.permission.BLUETOOTH)
-            }
-        }
+        // Bluetooth and sensor setup
+        setupBluetoothPermissionsAndSensor()
 
-        // Landscape TEI setup
+        // TEI Landscape setup
         setUpEventCaptureFormLandscape(eventUid)
         if (isLandscape() && areTeiUidAndEnrollmentUidNotNull()) {
             val viewModelFactory = app().dashboardComponent()?.dashboardViewModelFactory()
@@ -281,6 +252,43 @@ class EventCaptureActivity :
 
         if (intent.shouldLaunchSyncDialog()) {
             showSyncDialog(EVENT_SYNC)
+        }
+    }
+
+
+    private fun initializeActivityResultLaunchers() {
+        permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                setupTemperatureSensor()
+            } else {
+                Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        bluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                setupTemperatureSensor()
+            }
+        }
+    }
+
+    private fun setupBluetoothPermissionsAndSensor() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                setupTemperatureSensor()
+            } else {
+                permissionsLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                setupTemperatureSensor()
+            } else {
+                permissionsLauncher.launch(Manifest.permission.BLUETOOTH)
+            }
         }
     }
 

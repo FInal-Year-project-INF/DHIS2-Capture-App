@@ -2,7 +2,6 @@ package org.dhis2.usescases.eventsWithoutRegistration.com.coder.temperec.ul.them
 
 
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

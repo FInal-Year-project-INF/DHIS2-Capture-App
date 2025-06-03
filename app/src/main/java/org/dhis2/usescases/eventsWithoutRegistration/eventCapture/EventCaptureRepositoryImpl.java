@@ -35,51 +35,78 @@ public class EventCaptureRepositoryImpl implements EventCaptureContract.EventCap
     private final D2 d2;
 
     public EventCaptureRepositoryImpl(String eventUid, D2 d2) {
-        this.eventUid = eventUid;
-        this.d2 = d2;
+        this.eventUid = Objects.requireNonNull(eventUid, "eventUid cannot be null");
+        this.d2 = Objects.requireNonNull(d2, "D2 instance cannot be null");
     }
 
     private Event getCurrentEvent() {
-        return d2.eventModule().events().uid(eventUid).blockingGet();
+        try {
+            return d2.eventModule().events().uid(eventUid).blockingGet();
+        } catch (Exception e) {
+            Timber.e(e, "Failed to get current event");
+            throw new RuntimeException("Failed to load event data");
+        }
     }
 
     @Override
     public boolean isEnrollmentOpen() {
-        Event currentEvent = getCurrentEvent();
-        return currentEvent.enrollment() == null || d2.enrollmentModule().enrollmentService().blockingIsOpen(currentEvent.enrollment());
+        try {
+            Event currentEvent = getCurrentEvent();
+            return currentEvent.enrollment() == null ||
+                    d2.enrollmentModule().enrollmentService().blockingIsOpen(currentEvent.enrollment());
+        } catch (Exception e) {
+            Timber.e(e, "Error checking enrollment status");
+            return false;
+        }
     }
 
     @Override
     public boolean isEnrollmentCancelled() {
-        Enrollment enrollment = d2.enrollmentModule().enrollments().uid(getCurrentEvent().enrollment()).blockingGet();
-        if (enrollment == null)
+        try {
+            String enrollmentUid = getCurrentEvent().enrollment();
+            if (enrollmentUid == null) return false;
+
+            Enrollment enrollment = d2.enrollmentModule().enrollments().uid(enrollmentUid).blockingGet();
+            return enrollment != null && enrollment.status() == EnrollmentStatus.CANCELLED;
+        } catch (Exception e) {
+            Timber.e(e, "Error checking enrollment cancellation status");
             return false;
-        else
-            return enrollment.status() == EnrollmentStatus.CANCELLED;
+        }
     }
 
     @Override
     public boolean isEventEditable(String eventUid) {
-        return d2.eventModule().eventService().blockingIsEditable(eventUid);
+        try {
+            return d2.eventModule().eventService().blockingIsEditable(eventUid);
+        } catch (Exception e) {
+            Timber.e(e, "Error checking event editability");
+            return false;
+        }
     }
 
     @Override
     public Flowable<String> programStageName() {
-        return d2.programModule().programStages().uid(getCurrentEvent().programStage()).get()
+        return d2.programModule().programStages()
+                .uid(getCurrentEvent().programStage())
+                .get()
                 .map(BaseIdentifiableObject::displayName)
+                .onErrorReturnItem("")
                 .toFlowable();
     }
 
     @Override
     public Flowable<OrganisationUnit> orgUnit() {
-        return Flowable.just(
-                Objects.requireNonNull(
-                        d2.organisationUnitModule()
-                                .organisationUnits()
-                                .uid(getCurrentEvent().organisationUnit())
-                                .blockingGet()
-                )
-        );
+        return Flowable.fromCallable(() -> {
+            String orgUnitUid = getCurrentEvent().organisationUnit();
+            OrganisationUnit orgUnit = d2.organisationUnitModule()
+                    .organisationUnits()
+                    .uid(orgUnitUid)
+                    .blockingGet();
+            if (orgUnit == null) {
+                throw new RuntimeException("Organisation unit not found");
+            }
+            return orgUnit;
+        }).onErrorReturnItem(OrganisationUnit.builder().uid("").displayName("Unknown").build());
     }
 
     @Override
@@ -98,139 +125,233 @@ public class EventCaptureRepositoryImpl implements EventCaptureContract.EventCap
     @Override
     public Observable<Boolean> deleteEvent() {
         return d2.eventModule().events().uid(eventUid).delete()
-                .andThen(Observable.just(true));
+                .toObservable()
+                .map(ignored -> true)
+                .onErrorReturnItem(false);
     }
+
 
     @Override
     public Observable<Boolean> updateEventStatus(EventStatus status) {
-
         return Observable.fromCallable(() -> {
-            d2.eventModule().events().uid(eventUid)
-                    .setStatus(status);
-            return true;
+            try {
+                d2.eventModule().events().uid(eventUid).setStatus(status);
+                return true;
+            } catch (Exception e) {
+                Timber.e(e);
+                return false;
+            }
         });
     }
 
     @Override
     public Observable<Boolean> rescheduleEvent(Date newDate) {
         return Observable.fromCallable(() -> {
-            d2.eventModule().events().uid(eventUid)
-                    .setDueDate(newDate);
-            d2.eventModule().events().uid(eventUid)
-                    .setStatus(EventStatus.SCHEDULE);
-            return true;
+            try {
+                d2.eventModule().events().uid(eventUid).setDueDate(newDate);
+                d2.eventModule().events().uid(eventUid).setStatus(EventStatus.SCHEDULE);
+                return true;
+            } catch (Exception e) {
+                Timber.e(e);
+                return false;
+            }
         });
     }
 
     @Override
     public Observable<String> programStage() {
-        return Observable.just(Objects.requireNonNull(getCurrentEvent().programStage()));
+        return Observable.fromCallable(() -> {
+            String programStage = getCurrentEvent().programStage();
+            if (programStage == null) {
+                throw new RuntimeException("Program stage not found");
+            }
+            return programStage;
+        }).onErrorReturnItem("");
     }
 
     @Override
     public boolean getAccessDataWrite() {
-        return d2.eventModule().eventService().blockingHasDataWriteAccess(eventUid);
+        try {
+            return d2.eventModule().eventService().blockingHasDataWriteAccess(eventUid);
+        } catch (Exception e) {
+            Timber.e(e);
+            return false;
+        }
+    }
+
+    public Single<EventEditableStatus> getEditableStatus(String eventUid) {
+        return Single.fromCallable(() -> {
+            try {
+                return d2.eventModule().eventService().blockingGetEditableStatus(eventUid);
+            } catch (Exception e) {
+                Timber.e(e);
+                return new EventEditableStatus.NonEditable(EventNonEditableReason.EXPIRED);
+
+            }
+        });
     }
 
     @Override
     public Flowable<EventStatus> eventStatus() {
-        return Flowable.just(Objects.requireNonNull(getCurrentEvent().status()));
+        return Flowable.fromCallable(() -> {
+            EventStatus status = getCurrentEvent().status();
+            if (status == null) {
+                throw new RuntimeException("Event status not found");
+            }
+            return status;
+        }).onErrorReturnItem(EventStatus.ACTIVE);
     }
 
     @Override
     public Single<Boolean> canReOpenEvent() {
-        return Single.fromCallable(() -> d2.userModule().authorities()
-                .byName().in(AuthoritiesKt.AUTH_UNCOMPLETE_EVENT, AuthoritiesKt.AUTH_ALL).one().blockingExists()
-        );
+        return Single.fromCallable(() -> {
+            try {
+                return d2.userModule().authorities()
+                        .byName()
+                        .in(AuthoritiesKt.AUTH_UNCOMPLETE_EVENT, AuthoritiesKt.AUTH_ALL)
+                        .one()
+                        .blockingExists();
+            } catch (Exception e) {
+                Timber.e(e);
+                return false;
+            }
+        });
     }
 
     @Override
     public Observable<Boolean> isCompletedEventExpired(String eventUid) {
-        return d2.eventModule().eventService().getEditableStatus(eventUid).map(editionStatus -> {
-            if (editionStatus instanceof EventEditableStatus.NonEditable nonEditableStatus) {
-                return nonEditableStatus.getReason() == EventNonEditableReason.EXPIRED;
-            } else {
-                return false;
-            }
-        }).toObservable();
+        return d2.eventModule().eventService()
+                .getEditableStatus(eventUid)
+                .map(editionStatus -> {
+                    if (editionStatus instanceof EventEditableStatus.NonEditable) {
+                        return ((EventEditableStatus.NonEditable) editionStatus)
+                                .getReason() == EventNonEditableReason.EXPIRED;
+                    }
+                    return false;
+                })
+                .onErrorReturnItem(false)
+                .toObservable();
     }
 
     @Override
     public Flowable<Boolean> eventIntegrityCheck() {
-        Event currentEvent = getCurrentEvent();
-        return Flowable.just(currentEvent).map(event ->
-                (event.status() == EventStatus.COMPLETED ||
-                        event.status() == EventStatus.ACTIVE ||
-                            event.status() == EventStatus.SKIPPED) &&
-                        (event.eventDate() == null || !event.eventDate().after(new Date()))
-        );
+        return Flowable.fromCallable(() -> {
+            Event event = getCurrentEvent();
+            return (event.status() == EventStatus.COMPLETED ||
+                    event.status() == EventStatus.ACTIVE ||
+                    event.status() == EventStatus.SKIPPED) &&
+                    (event.eventDate() == null || !event.eventDate().after(new Date()));
+        }).onErrorReturnItem(false);
     }
 
     @Override
     public Single<Integer> getNoteCount() {
-        return d2.noteModule().notes().byEventUid().eq(eventUid).count();
+        return d2.noteModule().notes()
+                .byEventUid().eq(eventUid)
+                .count()
+                .onErrorReturnItem(0);
     }
 
     @Override
     public boolean showCompletionPercentage() {
-        if (d2.settingModule().appearanceSettings().blockingExists()) {
-            ProgramConfigurationSetting programConfigurationSetting = d2.settingModule()
+        try {
+            if (!d2.settingModule().appearanceSettings().blockingExists()) {
+                return true;
+            }
+
+            ProgramConfigurationSetting setting = d2.settingModule()
                     .appearanceSettings()
                     .getProgramConfigurationByUid(getCurrentEvent().program());
 
-            if (programConfigurationSetting != null &&
-                    programConfigurationSetting.completionSpinner() != null) {
-                return programConfigurationSetting.completionSpinner();
-            }
+            return setting == null ||
+                    setting.completionSpinner() == null ||
+                    setting.completionSpinner();
+        } catch (Exception e) {
+            Timber.e(e);
+            return true;
         }
-        return true;
     }
 
     @Override
     public boolean hasAnalytics() {
-        Event currentEvent = getCurrentEvent();
-        boolean hasProgramIndicators = !d2.programModule().programIndicators().byProgramUid().eq(currentEvent.program()).blockingIsEmpty();
-        List<ProgramRule> programRules = d2.programModule().programRules().withProgramRuleActions()
-                .byProgramUid().eq(currentEvent.program()).blockingGet();
-        boolean hasProgramRules = false;
-        for (ProgramRule rule : programRules) {
-            for (ProgramRuleAction action : Objects.requireNonNull(rule.programRuleActions())) {
-                if (action.programRuleActionType() == ProgramRuleActionType.DISPLAYKEYVALUEPAIR ||
-                        action.programRuleActionType() == ProgramRuleActionType.DISPLAYTEXT) {
-                    hasProgramRules = true;
+        try {
+            Event currentEvent = getCurrentEvent();
+            boolean hasProgramIndicators = d2.programModule().programIndicators()
+                    .byProgramUid().eq(currentEvent.program())
+                    .blockingGet().size() > 0;
+
+            List<ProgramRule> programRules = d2.programModule().programRules()
+                    .withProgramRuleActions()
+                    .byProgramUid().eq(currentEvent.program())
+                    .blockingGet();
+
+            for (ProgramRule rule : programRules) {
+                if (rule.programRuleActions() != null) {
+                    for (ProgramRuleAction action : rule.programRuleActions()) {
+                        if (action.programRuleActionType() == ProgramRuleActionType.DISPLAYKEYVALUEPAIR ||
+                                action.programRuleActionType() == ProgramRuleActionType.DISPLAYTEXT) {
+                            return true;
+                        }
+                    }
                 }
             }
+
+            return hasProgramIndicators;
+        } catch (Exception e) {
+            Timber.e(e);
+            return false;
         }
-        return hasProgramIndicators || hasProgramRules;
     }
 
     @Override
     public boolean hasRelationships() {
-        return !d2.relationshipModule().relationshipTypes()
-                .byAvailableForEvent(eventUid)
-                .blockingIsEmpty();
+        try {
+            return d2.relationshipModule().relationshipTypes()
+                    .byAvailableForEvent(eventUid)
+                    .blockingGet().size() > 0;
+        } catch (Exception e) {
+            Timber.e(e);
+            return false;
+        }
     }
 
     @Override
     public ValidationStrategy validationStrategy() {
-        ValidationStrategy validationStrategy =
-                SdkExtensionsKt.programStage(d2, programStage().blockingFirst())
-                        .validationStrategy();
-
-        return validationStrategy != null ? validationStrategy : ValidationStrategy.ON_COMPLETE;
+        try {
+            ValidationStrategy strategy = SdkExtensionsKt.programStage(d2, programStage().blockingFirst())
+                    .validationStrategy();
+            return strategy != null ? strategy : ValidationStrategy.ON_COMPLETE;
+        } catch (Exception e) {
+            Timber.e(e);
+            return ValidationStrategy.ON_COMPLETE;
+        }
     }
 
     @Override
     @Nullable
     public String getEnrollmentUid() {
-        return getCurrentEvent().enrollment();
+        try {
+            return getCurrentEvent().enrollment();
+        } catch (Exception e) {
+            Timber.e(e);
+            return null;
+        }
     }
 
     @Override
     @Nullable
     public String getTeiUid() {
-        Enrollment enrollment = d2.enrollmentModule().enrollments().uid(getEnrollmentUid()).blockingGet();
-        return enrollment != null ? enrollment.trackedEntityInstance() : null;
+        try {
+            String enrollmentUid = getEnrollmentUid();
+            if (enrollmentUid == null) return null;
+
+            Enrollment enrollment = d2.enrollmentModule().enrollments()
+                    .uid(enrollmentUid)
+                    .blockingGet();
+            return enrollment != null ? enrollment.trackedEntityInstance() : null;
+        } catch (Exception e) {
+            Timber.e(e);
+            return null;
+        }
     }
 }
-
